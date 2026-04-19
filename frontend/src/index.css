@@ -1,0 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-background: #f8f9ff;
+  --color-error: #ba1a1a;
+  --color-error_container: #ffdad6;
+  --color-inverse_on_surface: #eaf1ff;
+  --color-inverse_primary: #c3c0ff;
+  --color-inverse_surface: #213145;
+  --color-on_background: #0b1c30;
+  --color-on_error: #ffffff;
+  --color-on_error_container: #93000a;
+  --color-on_primary: #ffffff;
+  --color-on_primary_container: #dad7ff;
+  --color-on_secondary: #ffffff;
+  --color-on_secondary_container: #454386;
+  --color-on_surface: #0b1c30;
+  --color-on_surface_variant: #464555;
+  --color-on_tertiary: #ffffff;
+  --color-on_tertiary_container: #ffd2be;
+  --color-outline: #777587;
+  --color-outline_variant: #c7c4d8;
+  --color-primary: #3525cd;
+  --color-primary_container: #4f46e5;
+  --color-secondary: #58579b;
+  --color-secondary_container: #b6b4ff;
+  --color-surface: #f8f9ff;
+  --color-surface_bright: #f8f9ff;
+  --color-surface_container: #e5eeff;
+  --color-surface_container_high: #dce9ff;
+  --color-surface_container_highest: #d3e4fe;
+  --color-surface_container_low: #eff4ff;
+  --color-surface_container_lowest: #ffffff;
+  --color-surface_dim: #cbdbf5;
+  --color-surface_tint: #4d44e3;
+  --color-surface_variant: #d3e4fe;
+  --color-tertiary: #7e3000;
+  --color-tertiary_container: #a44100;
+
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-on_background);
+    font-family: var(--font-sans);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+  }
+}
+
+@layer components {
+  /* No 1px border rule applied using inner shadow */
+  .ghost-border {
+    box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.4);
+  }
+}
