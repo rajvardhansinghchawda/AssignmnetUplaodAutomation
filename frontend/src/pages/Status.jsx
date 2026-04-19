@@ -77,12 +77,20 @@ const Status = () => {
             </h3>
             {lastRun && lastRun.status ? (
               <div className="flex items-center gap-2 mb-2">
-                {lastRun.status === 'SUCCESS' ? (
+                {lastRun.status.toLowerCase() === 'running' ? (
+                   <Clock className="w-6 h-6 text-primary animate-spin" />
+                ) : lastRun.status.toLowerCase() === 'success' ? (
                    <CheckCircle2 className="w-6 h-6 text-[#16a34a] fill-[#dcfce7]" />
+                ) : lastRun.status.toLowerCase() === 'stopped' ? (
+                   <div className="w-6 h-6 rounded-full bg-surface_container flex items-center justify-center text-on_surface_variant">
+                     <div className="w-2.5 h-2.5 bg-current rounded-sm" />
+                   </div>
                  ) : (
                    <XCircle className="w-6 h-6 text-[#dc2626] fill-[#fee2e2]" />
                  )}
-                <span className="text-2xl font-display font-bold text-on_background">{lastRun.status}</span>
+                <span className={`text-2xl font-display font-bold text-on_background capitalize ${lastRun.status.toLowerCase() === 'running' ? 'animate-pulse' : ''}`}>
+                  {lastRun.status}
+                </span>
               </div>
             ) : (
               <div className="text-on_surface_variant mb-2">No run recorded</div>
@@ -91,7 +99,9 @@ const Status = () => {
           {lastRun && lastRun.timestamp && (
             <div className="mt-4">
                <p className="text-sm font-medium text-on_surface">{lastRun.formatted_date || lastRun.timestamp}</p>
-               <p className="text-xs text-on_surface_variant mt-1">{lastRun.upload_count != null ? `${lastRun.upload_count} file(s) uploaded` : lastRun.error}</p>
+               <p className="text-xs text-on_surface_variant mt-1">
+                 <span className="font-semibold text-primary">{lastRun.upload_count ?? 0}</span> assignments processed
+               </p>
             </div>
           )}
         </div>

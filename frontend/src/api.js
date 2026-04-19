@@ -35,6 +35,16 @@ export const triggerRun = async (formData) => {
   });
 };
 
+// Check for active run
+export const getActiveRun = async () => {
+  return api.get('/api/run/active');
+};
+
+// Stop a running script
+export const stopRun = async (runId) => {
+  return api.post(`/api/run/${runId}/stop`);
+};
+
 // Save config schedule (multipart data)
 export const saveConfig = async (formData) => {
   return api.post('/api/config', formData, {
@@ -55,6 +65,11 @@ export const getLastStatus = async () => {
 // Get history
 export const getRunHistory = async (limit = 20) => {
   return api.get(`/api/runs?limit=${limit}`);
+};
+
+// Get single run detail (with full logs)
+export const getRunDetail = async (runId) => {
+  return api.get(`/api/runs/${runId}`);
 };
 
 // Schedule functions

@@ -1,15 +1,15 @@
 const LiveLog = ({ logs }) => {
   return (
-    <div className="bg-inverse_surface rounded-xl p-4 shadow-inner mt-4 overflow-hidden border border-surface_container_highest">
-      <div className="flex items-center justify-between mb-3 border-b border-surface_variant/20 pb-2">
-        <div className="flex gap-2">
-          <div className="w-3 h-3 rounded-full bg-error"></div>
-          <div className="w-3 h-3 rounded-full bg-tertiary"></div>
-          <div className="w-3 h-3 rounded-full bg-primary_container"></div>
+    <div className="bg-inverse_surface rounded-xl p-3 md:p-4 shadow-inner mt-4 overflow-hidden border border-surface_container_highest flex flex-col h-full">
+      <div className="flex items-center justify-between mb-2 md:mb-3 border-b border-surface_variant/20 pb-2 flex-none">
+        <div className="flex gap-1.5 md:gap-2">
+          <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-error"></div>
+          <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-tertiary"></div>
+          <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-primary_container"></div>
         </div>
-        <span className="text-xs text-inverse_on_surface/60 font-mono">live_output.log</span>
+        <span className="text-[10px] md:text-xs text-inverse_on_surface/60 font-mono">live_output.log</span>
       </div>
-      <div className="h-48 overflow-y-auto font-mono text-sm space-y-1 scrollbar-thin scrollbar-thumb-surface_variant">
+      <div className="flex-1 overflow-y-auto font-mono text-[11px] md:text-sm space-y-0.5 md:space-y-1 scrollbar-thin scrollbar-thumb-surface_variant">
         {logs && logs.length > 0 ? (
           logs.map((log, idx) => (
             <div key={idx} className="flex gap-3">

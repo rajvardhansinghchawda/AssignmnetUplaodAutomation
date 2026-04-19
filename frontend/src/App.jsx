@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Setup from './pages/Setup';
 import Status from './pages/Status';
+import Running from './pages/Running';
 import Login from './pages/Login';
 import Navbar from './components/Navbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -17,7 +18,7 @@ function App() {
       <Router>
         <div className="min-h-screen bg-background text-on_background font-sans selection:bg-primary_container selection:text-on_primary_container">
           <Navbar />
-          <main className="max-w-4xl mx-auto px-6 py-10 overflow-x-hidden">
+          <main className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-10 overflow-x-hidden">
             <Routes>
               <Route path="/" element={<Navigate to="/setup" replace />} />
               <Route path="/login" element={<Login />} />
@@ -26,6 +27,9 @@ function App() {
               } />
               <Route path="/status" element={
                 <ProtectedRoute><Status /></ProtectedRoute>
+              } />
+              <Route path="/running" element={
+                <ProtectedRoute><Running /></ProtectedRoute>
               } />
               <Route path="/dashboard" element={<Navigate to="/setup" replace />} />
             </Routes>

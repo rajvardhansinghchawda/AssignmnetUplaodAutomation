@@ -25,7 +25,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @router.post("/config")
 async def save_config(
     username: str = Form(...),
-    password: str = Form(...),
+    password: str = Form(None),
     schedule_time: str = Form("08:00"),
     schedule_enabled: str = Form("false"),
     # User picks a past file by its DB id (no new upload)
@@ -40,6 +40,7 @@ async def save_config(
       • file is provided → save new file to disk + DB, get its id
     """
     resolved_file_id: int | None = None
+    existing_cfg = await db.get_config(current_user["id"])
 
     if file_id and file_id.strip():
         # ── Mode A: user selected a past upload ─────────────────────────────
@@ -71,17 +72,24 @@ async def save_config(
         )
     else:
         # No new file — fall back to whatever is already in config
-        current = await db.get_config(current_user["id"])
-        resolved_file_id = current.get("file_id")
+        resolved_file_id = existing_cfg.get("file_id")
         if not resolved_file_id:
             raise HTTPException(400, "No file provided and no previous file found.")
+
+    # ── Handle Password Fallback ────────────────────────────────────────────
+    final_password = password
+    if not final_password or not final_password.strip():
+        final_password = existing_cfg.get("password")
+    
+    if not final_password:
+        raise HTTPException(400, "Password is required for the first-time setup.")
 
     enabled = schedule_enabled.lower() in ("true", "1", "yes")
 
     await db.save_config(
         user_id=current_user["id"],
         username=username,
-        password=password,
+        password=final_password,
         file_id=resolved_file_id,
         schedule_time=schedule_time,
         schedule_enabled=enabled,

@@ -258,6 +258,19 @@ async def get_last_run(user_id: int) -> Optional[dict]:
     return runs[0] if runs else None
 
 
+async def get_active_run(user_id: int) -> Optional[dict]:
+    """Find the most recent run for a user that is still 'running'."""
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT id, started_at, triggered_by, status
+            FROM runs
+            WHERE user_id = $1 AND status = 'running'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """, user_id)
+        return dict(row) if row else None
+
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 async def save_config(

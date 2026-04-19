@@ -20,6 +20,9 @@ log = logging.getLogger(__name__)
 # run_id  →  asyncio.Queue  (None sentinel = stream finished)
 active_runs: dict[int, asyncio.Queue] = {}
 
+# run_id  →  subprocess.Popen (tracks actual process objects to allow termination)
+running_processes: dict[int, subprocess.Popen] = {}
+
 
 async def start_run(
     user_id: int,
@@ -43,7 +46,7 @@ async def start_run(
     return run_id
 
 
-def _sync_subprocess_worker(cmd, queue, loop):
+def _sync_subprocess_worker(run_id, cmd, queue, loop):
     """
     Synchronous worker running in a thread. 
     Reads stdout line by line and pushes to the async queue.
@@ -62,6 +65,9 @@ def _sync_subprocess_worker(cmd, queue, loop):
             encoding='utf-8',
             errors='replace'
         )
+        
+        # Register the process so it can be killed later
+        running_processes[run_id] = process
 
         for line in iter(process.stdout.readline, ""):
             line = line.rstrip()
@@ -76,12 +82,26 @@ def _sync_subprocess_worker(cmd, queue, loop):
                     pass
 
         process.wait()
-        status = "success" if process.returncode == 0 else "error"
+        
+        if process.returncode == 0:
+            status = "success"
+        elif process.returncode in [-15, 15, 1, 3221225786]: # Common termination codes (SIGTERM, Windows exit)
+            # If it was in running_processes, and it's gone, it might have been stopped
+            # but we can't be 100% sure here without more state. 
+            # However, if it produced the "COMPLETE" line, it's a success.
+            is_complete = any("COMPLETE" in l for l in full_log[-5:])
+            status = "success" if is_complete else "stopped"
+        else:
+            status = "error"
+            
     except Exception as e:
         err = f"THREAD RUNNER ERROR: {e}"
         full_log.append(err)
         loop.call_soon_threadsafe(queue.put_nowait, err)
         status = "error"
+    finally:
+        # Unregister process
+        running_processes.pop(run_id, None)
         
     return status, uploads_total, "\n".join(full_log)
 
@@ -125,7 +145,7 @@ async def _execute(
         log.info(f"Starting threaded runner for run_id={run_id}")
         
         # 3. Offload to thread
-        status, uploads, logs = await asyncio.to_thread(_sync_subprocess_worker, cmd, queue, loop)
+        status, uploads, logs = await asyncio.to_thread(_sync_subprocess_worker, run_id, cmd, queue, loop)
 
     except Exception as exc:
         err = f"RUNNER WRAPPER ERROR: {exc}"
@@ -141,12 +161,12 @@ async def _execute(
             try: os.remove(tmp_path)
             except: pass
             
-        # 5. Signal end
-        await queue.put(None)
-        
-        # 6. Save to DB
+        # 5. Save to DB
         await db.finish_run(run_id, status, uploads, logs)
         active_runs.pop(run_id, None)
+
+        # 6. Signal end to stream
+        await queue.put(None)
 
 
 async def stream_run(run_id: int):
@@ -168,3 +188,15 @@ async def stream_run(run_id: int):
         if run and run.get("log_text"):
             for line in run["log_text"].split("\n"):
                 yield line
+
+
+async def stop_run(run_id: int):
+    """Kills the subprocess associated with run_id."""
+    process = running_processes.get(run_id)
+    if process:
+        log.info(f"Terminating run_id={run_id}")
+        process.terminate()
+        # The _sync_subprocess_worker thread will naturally exit, cleanup 
+        # is handled in finally blocks there and in _execute.
+        return True
+    return False

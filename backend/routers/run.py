@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 import db
 from config import settings
 from routers.auth import get_current_user
-from services.runner import active_runs, start_run, stream_run
+from services.runner import active_runs, start_run, stream_run, stop_run
 
 router = APIRouter()
 UPLOAD_DIR = Path(settings.upload_dir)
@@ -33,7 +33,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @router.post("/run")
 async def trigger_run(
     username: str = Form(...),
-    password: str = Form(...),
+    password: str = Form(None),
     # Option A: pick an already-stored file by its DB id
     file_id: str = Form(None),
     # Option B: upload a new file right now
@@ -46,6 +46,15 @@ async def trigger_run(
 
     resolved_file_id: int | None = None
     file_path: str = ""
+    existing_cfg = await db.get_config(current_user["id"])
+
+    # ── Handle Password Fallback ────────────────────────────────────────────
+    final_password = password
+    if not final_password or not final_password.strip():
+        final_password = existing_cfg.get("password")
+    
+    if not final_password:
+        raise HTTPException(400, "Password is required (none found in saved config).")
 
     if file_id and file_id.strip():
         # ── Use a past file ──────────────────────────────────────────────────
@@ -76,7 +85,15 @@ async def trigger_run(
             file_size=len(contents),
         )
     else:
-        raise HTTPException(400, "Provide either file_id (past upload) or a new file.")
+        # ── Fallback to last file in config ───────────────────────────────────
+        resolved_file_id = existing_cfg.get("file_id")
+        if not resolved_file_id:
+            raise HTTPException(400, "No file provided and no past file found.")
+        
+        record = await db.get_file(resolved_file_id)
+        if not record or not os.path.exists(record["file_path"]):
+            raise HTTPException(410, "Saved file no longer exists.")
+        file_path = record["file_path"]
 
     # Track usage count
     await db.increment_file_use(resolved_file_id)
@@ -85,7 +102,7 @@ async def trigger_run(
     run_id = await start_run(
         user_id=current_user["id"],
         username=username,
-        password=password,
+        password=final_password,
         file_path=file_path,
         triggered_by="manual",
         file_id=resolved_file_id,
@@ -122,6 +139,33 @@ async def run_stream(run_id: int, current_user: dict = Depends(get_current_user)
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── GET /api/run/active ───────────────────────────────────────────────────────
+
+@router.get("/run/active")
+async def active_run_info(current_user: dict = Depends(get_current_user)):
+    """Returns the ID of the currently running logic for this user."""
+    run = await db.get_active_run(current_user["id"])
+    return run
+
+
+# ── POST /api/run/{run_id}/stop ───────────────────────────────────────────────
+
+@router.post("/run/{run_id}/stop")
+async def abort_run(run_id: int, current_user: dict = Depends(get_current_user)):
+    """Kills an active run."""
+    run = await db.get_run(run_id)
+    if not run:
+        raise HTTPException(404, "Run not found.")
+    if run["user_id"] != current_user["id"]:
+        raise HTTPException(403, "Forbidden")
+    
+    success = await stop_run(run_id)
+    if not success:
+        raise HTTPException(400, "Run is not active or already finished.")
+    
+    return {"status": "stopping", "run_id": run_id}
 
 
 # ── GET /api/runs ─────────────────────────────────────────────────────────────

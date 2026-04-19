@@ -15,6 +15,8 @@ const Setup = () => {
   // Schedule State
   const [scheduleTime, setScheduleTime] = useState('08:00');
   const [isScheduleEnabled, setIsScheduleEnabled] = useState(false);
+  const [savedFileId, setSavedFileId] = useState(null);
+  const [savedFileName, setSavedFileName] = useState('');
 
   // UI State
   const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +24,7 @@ const Setup = () => {
   const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState([]);
   const [errorMsg, setErrorMsg] = useState('');
+  const [formIntent, setFormIntent] = useState(null); // 'run' or 'save'
   
   // EventSource ref for cleanup
   const sseRef = useRef(null);
@@ -35,6 +38,8 @@ const Setup = () => {
         if (res.data.username) setEnrollment(res.data.username);
         if (res.data.schedule_time) setScheduleTime(res.data.schedule_time);
         if (res.data.schedule_enabled !== undefined) setIsScheduleEnabled(res.data.schedule_enabled);
+        if (res.data.file_id) setSavedFileId(res.data.file_id);
+        if (res.data.file_name) setSavedFileName(res.data.file_name);
       } catch (err) {
         console.error("Failed to load saved config:", err);
       }
@@ -48,55 +53,28 @@ const Setup = () => {
     };
   }, []);
 
-  const handleRunNow = async () => {
-    if (!enrollment || !password || !file) {
+  const handleRunNow = () => {
+    const hasSavedConfig = savedFileId !== null;
+    if (!enrollment || (!password && !hasSavedConfig) || (!file && !savedFileId)) {
       setErrorMsg("Please fill in enrollment, password, and attach a file to run.");
       return;
     }
     
-    setErrorMsg('');
-    setIsRunning(true);
-    setShowLogs(true);
-    setLogs(["[00:00:00] Initiating run request..."]);
-
-    try {
-      const formData = new FormData();
-      formData.append('username', enrollment);
-      formData.append('password', password);
-      formData.append('file', file);
-
-      const runRes = await triggerRun(formData);
-      const runId = runRes.data.run_id;
-      
-      // Start streaming logs immediately!
-      if (sseRef.current) sseRef.current.close();
-      
-      const sseUrl = `${API_BASE_URL}/api/run/stream?run_id=${runId}`;
-      const eventSource = new EventSource(sseUrl);
-      sseRef.current = eventSource;
-
-      eventSource.onmessage = (event) => {
-        setLogs(prev => [...prev, event.data]);
-        if (event.data.includes("COMPLETE") || event.data.includes("terminated")) {
-           setIsRunning(false);
-           eventSource.close();
-        }
-      };
-
-      eventSource.onerror = () => {
-        setLogs(prev => [...prev, "✗ Error: Log stream disconnected unexpectedly."]);
-        setIsRunning(false);
-        eventSource.close();
-      };
-      
-    } catch (err) {
-      setIsRunning(false);
-      setErrorMsg("Failed to start run. Is the backend offline?");
-    }
+    // Navigate to the dedicated running page with form data
+    // This "real" navigation is critical for Chrome to trigger the password save prompt.
+    navigate('/running', { 
+      state: { 
+        enrollment, 
+        password, 
+        file, 
+        fileId: savedFileId 
+      } 
+    });
   };
 
   const handleSaveConfig = async () => {
-    if (!enrollment || !password || !file) {
+    const hasSavedConfig = savedFileId !== null;
+    if (!enrollment || (!password && !hasSavedConfig) || (!file && !savedFileId)) {
       setErrorMsg("Please fill in all fields (including the file) to save config.");
       return;
     }
@@ -106,7 +84,11 @@ const Setup = () => {
       const formData = new FormData();
       formData.append('username', enrollment);
       formData.append('password', password);
-      formData.append('file', file);
+      if (file) {
+        formData.append('file', file);
+      } else if (savedFileId) {
+        formData.append('file_id', savedFileId.toString());
+      }
       formData.append('schedule_time', scheduleTime);
       formData.append('schedule_enabled', isScheduleEnabled ? 'true' : 'false');
       
@@ -119,11 +101,25 @@ const Setup = () => {
     }
   };
 
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    if (formIntent === 'run') {
+      handleRunNow();
+    } else if (formIntent === 'save') {
+      handleSaveConfig();
+    }
+  };
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-3xl font-display font-semibold text-on_surface mb-2">Automate Your Uploads</h2>
-        <p className="text-on_surface_variant">Configure your credentials, upload the assignment file, and let the system handle the repetition.</p>
+    <form 
+      onSubmit={handleFormSubmit} 
+      method="POST"
+      action="#"
+      className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto"
+    >
+      <div className="mb-6 md:mb-8">
+        <h2 className="text-2xl md:text-3xl font-display font-semibold text-on_surface mb-2">Automate Your Uploads</h2>
+        <p className="text-sm md:text-base text-on_surface_variant leading-relaxed">Configure your credentials, upload the assignment file, and let the system handle the repetition.</p>
       </div>
 
       {errorMsg && (
@@ -133,47 +129,69 @@ const Setup = () => {
         </div>
       )}
 
-      <div className="bg-surface_container_lowest rounded-2xl p-8 shadow-sm border border-surface_container_highest mb-6">
+      <div className="bg-surface_container_lowest rounded-2xl p-5 md:p-8 shadow-sm border border-surface_container_highest mb-6">
         <h3 className="text-sm font-semibold mb-4 text-on_surface flex items-center gap-2">
           <Settings className="w-4 h-4 text-primary" />
           Credentials
         </h3>
         
         <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-on_surface_variant mb-1 uppercase tracking-wider">Enrollment Number</label>
-            <input 
-              type="text" 
-              value={enrollment}
-              onChange={(e) => setEnrollment(e.target.value)}
-              placeholder="e.g. 0832CSxxxx"
-              className="w-full bg-surface_container_highest border-none text-on_surface rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40 ghost-border outline-none transition-shadow"
-            />
-          </div>
-          
-          <div className="relative">
-            <label className="block text-xs font-medium text-on_surface_variant mb-1 uppercase tracking-wider">Password</label>
-            <input 
-              type={showPassword ? 'text' : 'password'} 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Portal Password"
-              className="w-full bg-surface_container_highest border-none text-on_surface rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40 ghost-border outline-none transition-shadow pr-10"
-            />
-            <button 
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-8 text-on_surface_variant hover:text-primary transition-colors focus:outline-none"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
+          {isRunning ? (
+            <div className="py-2 animate-in fade-in duration-500">
+               <p className="text-sm font-medium text-on_surface_variant">Script is currently executing for:</p>
+               <p className="text-lg font-bold text-primary">{enrollment}</p>
+               <p className="text-xs text-on_surface_variant/60 mt-1 italic">Input locked during execution to ensure consistency.</p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label htmlFor="enrollment" className="block text-xs font-medium text-on_surface_variant mb-1 uppercase tracking-wider">Enrollment Number</label>
+                <input 
+                  id="enrollment"
+                  type="text" 
+                  name="username"
+                  autoComplete="username"
+                  value={enrollment}
+                  onChange={(e) => setEnrollment(e.target.value)}
+                  placeholder="e.g. 0832CSxxxx"
+                  className="w-full bg-surface_container_highest border-none text-on_surface rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40 ghost-border outline-none transition-shadow"
+                />
+              </div>
+              
+              <div className="relative">
+                <label htmlFor="password" className="block text-xs font-medium text-on_surface_variant mb-1 uppercase tracking-wider">Password</label>
+                <input 
+                  id="password"
+                  type={showPassword ? 'text' : 'password'} 
+                  name="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={savedFileId ? "•••••••• (Saved)" : "Portal Password"}
+                  className="w-full bg-surface_container_highest border-none text-on_surface rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40 ghost-border outline-none transition-shadow pr-10"
+                />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-8 text-on_surface_variant hover:text-primary transition-colors focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="bg-surface_container_lowest rounded-2xl p-8 shadow-sm border border-surface_container_highest mb-6 flex flex-col md:flex-row gap-8">
+      <div className="bg-surface_container_lowest rounded-2xl p-5 md:p-8 shadow-sm border border-surface_container_highest mb-6 flex flex-col md:flex-row gap-6 md:gap-8">
         <div className="flex-1">
           <FileDropZone onFileSelect={setFile} />
+          {savedFileName && !file && (
+            <p className="text-xs text-primary mt-3 flex items-center gap-1 font-medium bg-primary/5 p-2 rounded-lg border border-primary/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+              Using saved file: <span className="underline italic">{savedFileName}</span>
+            </p>
+          )}
         </div>
         
         <div className="w-px bg-surface_variant hidden md:block"></div>
@@ -214,7 +232,8 @@ const Setup = () => {
 
       <div className="flex flex-col sm:flex-row items-center gap-4">
         <button 
-          onClick={handleRunNow}
+          type="submit"
+          onClick={() => setFormIntent('run')}
           disabled={isRunning}
           className="w-full sm:w-auto px-8 py-3 rounded-lg font-semibold text-sm transition-all shadow-md flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-primary_container text-on_primary hover:shadow-lg hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
@@ -227,7 +246,8 @@ const Setup = () => {
         </button>
         
         <button 
-          onClick={handleSaveConfig}
+          type="submit"
+          onClick={() => setFormIntent('save')}
           className="w-full sm:w-auto px-8 py-3 rounded-lg font-semibold text-sm transition-all bg-surface_container_high text-primary hover:bg-surface_container_highest shadow-sm flex items-center justify-center gap-2"
         >
           <Save className="w-4 h-4" />
@@ -240,14 +260,10 @@ const Setup = () => {
         Credentials are stored securely encrypted on the server.
       </p>
 
-      {/* Expandable Log Section */}
-      <div className={`transition-all duration-500 overflow-hidden ${showLogs ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
-        <LiveLog logs={logs} />
-      </div>
 
       {/* File History Section */}
       <FileHistorySection />
-    </div>
+    </form>
   );
 };
 
